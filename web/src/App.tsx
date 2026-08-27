@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import LogoCaminho from './logo.semfundo.png';
 
-const API = 'http://localhost:3333/https://colegio-valparaiso-api.onrender.com';
+const API = 'https://colegio-valparaiso-api.onrender.com/api';
 
 const turmasFixas = [
   { id: '6A', name: '6º Ano A' }, { id: '6B', name: '6º Ano B' },
@@ -80,11 +80,20 @@ export default function App() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErroLogin('');
+    
+    if (!email || !password) {
+      setErroLogin('Preencha o e-mail e a senha.');
+      return;
+    }
+
     try {
+      console.log("Tentando logar em:", `${API}/login`, { email, password });
       const res = await axios.post(`${API}/login`, { email, password });
+      console.log("Resposta do login:", res.data);
+      
       if (res && res.data) {
         setUser(res.data);
         localStorage.setItem('user', JSON.stringify(res.data));
@@ -98,6 +107,7 @@ export default function App() {
         carregarDadosServidor();
       }
     } catch (err: any) {
+      console.error("Erro detalhado no login:", err?.response || err);
       setErroLogin('E-mail institucional ou senha incorretos.');
     }
   };
@@ -160,7 +170,7 @@ export default function App() {
   if (!user) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-100 p-4 font-sans">
-        <form onSubmit={handleLogin} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
           
           <div className="flex flex-col items-center text-center mb-6">
             <div className="w-20 h-20 rounded-full bg-transparent flex items-center justify-center p-0 mb-3 overflow-hidden">
@@ -171,21 +181,42 @@ export default function App() {
           </div>
 
           {erroLogin && <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl font-semibold">{erroLogin}</div>}
+          
           <div className="mb-4">
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">E-mail Institucional</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="alex.castro@colegiovalparaiso.com" className="w-full border border-slate-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" required />
+            <input 
+              type="email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              placeholder="alex.castro@colegiovalparaiso.com" 
+              className="w-full border border-slate-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+            />
           </div>
+
           <div className="mb-6">
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Senha</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="w-full border border-slate-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" required />
+            <input 
+              type="password" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              placeholder="••••••••" 
+              className="w-full border border-slate-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+            />
           </div>
-          <button type="submit" className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-bold py-3 rounded-xl shadow transition-all text-sm">Entrar no Sistema</button>
+
+          <button 
+            type="button" 
+            onClick={() => handleLogin()} 
+            className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-bold py-3 rounded-xl shadow transition-all text-sm cursor-pointer"
+          >
+            Entrar no Sistema
+          </button>
           
           <div className="mt-4 text-center text-xs text-slate-500 space-y-1">
             <p>Prof: <span className="font-mono font-bold text-slate-700">alex.castro@colegiovalparaiso.com</span> / 123</p>
             <p>Coord: <span className="font-mono font-bold text-slate-700">coord@colegiovalparaiso.com</span> / 123</p>
           </div>
-        </form>
+        </div>
       </div>
     );
   }
@@ -265,7 +296,6 @@ export default function App() {
 
       {user.role === 'COORDINATOR' ? (
         <div className="space-y-6">
-          {/* DASHBOARD CARDS DE RESUMO */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-indigo-900 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-80">Total de Professores</span>
@@ -279,12 +309,11 @@ export default function App() {
             </div>
             <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-80">Status do Banco</span>
-              <span className="text-xl font-extrabold mt-2 text-emerald-400">🟢 Online (MySQL)</span>
-              <span className="text-[11px] opacity-70 mt-1">Conexão estável em localhost:3306</span>
+              <span className="text-xl font-extrabold mt-2 text-emerald-400">🟢 Online (Railway)</span>
+              <span className="text-[11px] opacity-70 mt-1">Conexão ativa na nuvem</span>
             </div>
           </div>
 
-          {/* PAINEL DE ACOMPANHAMENTO - LISTA TODOS OS PROFESSORES CADASTRADOS */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
               <div>

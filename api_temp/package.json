@@ -1,0 +1,23 @@
+{
+  "name": "sistema-planejamentos-api",
+  "version": "1.0.0",
+  "description": "API do Sistema de Planejamento - Colégio Valparaíso",
+  "main": "server.ts",
+  "scripts": {
+    "build": "npx prisma generate",
+    "start": "npx tsx server.ts",
+    "postinstall": "npx prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
