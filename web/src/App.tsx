@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import LogoCaminho from './logo.semfundo.png';
 
-const API = 'http://localhost:3333/api';
+const API = 'http://localhost:3333/https://colegio-valparaiso-api.onrender.com';
 
 const turmasFixas = [
   { id: '6A', name: '6º Ano A' }, { id: '6B', name: '6º Ano B' },

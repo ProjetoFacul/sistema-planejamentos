@@ -1,0 +1,30 @@
+# --- Geral ---
+.DS_Store
+Thumbs.db
+
+# --- Dependências ---
+node_modules/
+api/node_modules/
+web/node_modules/
+
+# --- Variáveis de Ambiente ---
+.env
+
+# --- Build Frontend ---
+web/dist/
+web/build/
+
+# --- Cache/Logs ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+api/.cache/
+web/.cache/
+
+# --- Logs do Prisma ---
+api/prisma/logs/
+
+# --- IDEs ---
+.vscode/
+.idea/
