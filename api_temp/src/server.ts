@@ -75,6 +75,16 @@ app.post('/api/plans', async (req: any, res: any) => {
 
     let validPeriodId = Number(periodId) || 1;
 
+    // Garantir que o período existe no banco antes de salvar o plano (evita erro de foreign key)
+    let periodExists = await prisma.period.findUnique({ where: { id: validPeriodId } });
+    if (!periodExists) {
+      await prisma.period.upsert({
+        where: { id: validPeriodId },
+        update: {},
+        create: { id: validPeriodId, name: `Quinzena ${validPeriodId}` }
+      });
+    }
+
     const plan = await prisma.lessonPlan.upsert({
       where: {
         teacherId_classId_subjectId_periodId: {

@@ -1,25 +1,40 @@
 import { PrismaClient } from '@prisma/client';
+
 const prisma = new PrismaClient();
 
 async function main() {
+  // Exemplo de como deve estar o upsert do usuário
   const teacher = await prisma.user.upsert({
-    where: { email: 'kaua@escola.com' },
+    where: { email: "kaua@escola.com" },
     update: {},
-    create: { name: 'Kauã Alves', email: 'kaua@escola.com', role: 'TEACHER' },
+    create: {
+      name: "Kauã Alves",
+      email: "kaua@escola.com",
+      role: "TEACHER",
+      password: "123" // <-- Adicione a senha aqui
+    }
   });
 
+  // Faça o mesmo para a coordenação caso esteja no seed:
   const coord = await prisma.user.upsert({
-    where: { email: 'coord@escola.com' },
+    where: { email: "coord@colegiovalparaiso.com" },
     update: {},
-    create: { name: 'Coordenador', email: 'coord@escola.com', role: 'COORDINATOR' },
+    create: {
+      name: "Coordenação",
+      email: "coord@colegiovalparaiso.com",
+      role: "COORDINATOR",
+      password: "123" // <-- Adicione a senha aqui
+    }
   });
 
-  const class7A = await prisma.class.create({ data: { name: '7º A' } });
-  const class7B = await prisma.class.create({ data: { name: '7º B' } });
-  const subject = await prisma.subject.create({ data: { name: 'Pensamento Computacional' } });
-  const period = await prisma.period.create({ data: { name: '01/09/2026 - 15/09/2026' } });
-
-  console.log('Seed executado com sucesso!');
+  console.log({ teacher, coord });
 }
 
-main().catch(e => console.error(e)).finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
