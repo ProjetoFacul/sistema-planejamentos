@@ -35,19 +35,23 @@ model Period {
 }
 
 model LessonPlan {
-  id         Int       @id @default(autoincrement())
-  content    String    @db.Text
-  status     String    // "DRAFT" ou "SUBMITTED"
-  sentAt     DateTime?
-
-  teacherId  Int
-  teacher    User      @relation(fields: [teacherId], references: [id])
-  classId    Int
-  class      Class     @relation(fields: [classId], references: [id])
-  subjectId  Int
-  subject    Subject   @relation(fields: [subjectId], references: [id])
-  periodId   Int
-  period     Period    @relation(fields: [periodId], references: [id])
+  id        Int       @id @default(autoincrement())
+  content   String    @db.Text
+  skills    String?   @db.Text // <-- Novo campo para Habilidades e Competências
+  status    String    @default("DRAFT") // DRAFT ou SUBMITTED
+  sentAt    DateTime? 
+  
+  teacherId Int
+  teacher   User      @relation(fields: [teacherId], references: [id])
+  
+  classId   Int
+  class     Class     @relation(fields: [classId], references: [id])
+  
+  subjectId Int
+  subject   Subject   @relation(fields: [subjectId], references: [id])
+  
+  periodId  Int
+  period    Period    @relation(fields: [periodId], references: [id])
 
   @@unique([teacherId, classId, subjectId, periodId])
 }

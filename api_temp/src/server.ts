@@ -51,9 +51,9 @@ app.get('/api/teachers', async (req, res) => {
   }
 });
 
-// Rota para salvar planejamento
+// Rota para salvar planejamento (com suporte a skills)
 app.post('/api/plans', async (req: any, res: any) => {
-  const { teacherId, teacherEmail, classId, subjectId, periodId, content, status } = req.body;
+  const { teacherId, teacherEmail, classId, subjectId, periodId, content, skills, status } = req.body;
   try {
     const sentDate = status === 'SUBMITTED' ? new Date() : null;
 
@@ -73,13 +73,11 @@ app.post('/api/plans', async (req: any, res: any) => {
       defaultSubject = await prisma.subject.create({ data: { name: 'Matemática' } });
     }
 
-    // Tratamento blindado para o Period
     let validPeriodId = Number(periodId);
     if (!validPeriodId || isNaN(validPeriodId)) {
       validPeriodId = 1;
     }
 
-    // Garante obrigatoriamente que o período existe usando upsert direto
     await prisma.period.upsert({
       where: { id: validPeriodId },
       update: {},
@@ -98,13 +96,14 @@ app.post('/api/plans', async (req: any, res: any) => {
           periodId: validPeriodId
         }
       },
-      update: { content, status, sentAt: sentDate },
+      update: { content, skills, status, sentAt: sentDate },
       create: { 
         teacherId: validTeacherId, 
         classId: defaultClass.id, 
         subjectId: defaultSubject.id, 
         periodId: validPeriodId, 
         content, 
+        skills,
         status, 
         sentAt: sentDate 
       }
