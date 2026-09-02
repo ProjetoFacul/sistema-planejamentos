@@ -63,7 +63,7 @@ app.post('/api/plans', async (req: any, res: any) => {
       '8A': '8º Ano A', '8B': '8º Ano B', '9A': '9º Ano A', '9B': '9º Ano B',
       '1S': '1ª Série', '2S': '2ª Série', '3S': '3ª Série'
     };
-    const nomeTurmaReal = nomesTurmas[classCode] || '6º Ano A';
+    const nomeTurmaReal = nomesTurmas[classCode] || classCode || '6º Ano A';
 
     let turmaObj = await prisma.class.findFirst({ where: { name: nomeTurmaReal } });
     if (!turmaObj) turmaObj = await prisma.class.create({ data: { name: nomeTurmaReal } });
@@ -95,16 +95,19 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// Rota de Avaliação do Coordenador Blindada (Usando ID direto)
+// Rota de Avaliação do Coordenador Totalmente Blindada
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
-  const { teacherId, classCode, periodId, status, feedback } = req.body;
+  const { teacherId, classCode, classNome, periodId, status, feedback } = req.body;
   try {
     const nomesTurmas: any = {
       '6A': '6º Ano A', '6B': '6º Ano B', '7A': '7º Ano A', '7B': '7º Ano B',
       '8A': '8º Ano A', '8B': '8º Ano B', '9A': '9º Ano A', '9B': '9º Ano B',
       '1S': '1ª Série', '2S': '2ª Série', '3S': '3ª Série'
     };
-    const nomeTurmaReal = nomesTurmas[classCode] || '6º Ano A';
+    
+    // Descobre o nome real da turma aceitando tanto código abreviado quanto nome direto
+    const identificadorTurma = classCode || classNome || '6A';
+    const nomeTurmaReal = nomesTurmas[identificadorTurma] || identificadorTurma;
 
     let turmaObj = await prisma.class.findFirst({ where: { name: nomeTurmaReal } });
     let defaultSubject = await prisma.subject.findFirst();
@@ -116,7 +119,6 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
       defaultSubject = await prisma.subject.create({ data: { name: 'Matemática' } });
     }
 
-    // Busca segura utilizando findFirst para evitar erros de chave composta
     const existingPlan = await prisma.lessonPlan.findFirst({
       where: {
         teacherId: Number(teacherId),
@@ -127,7 +129,7 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     });
 
     if (!existingPlan) {
-      return res.status(404).json({ error: 'Planejamento não encontrado no banco.' });
+      return res.status(404).json({ error: 'Planejamento não encontrado no banco para esta turma e período.' });
     }
 
     let parsedContent: any = {};
@@ -135,7 +137,6 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     
     parsedContent.coordinatorFeedback = feedback;
 
-    // Atualiza diretamente pelo ID primário do registro encontrado
     const updatedPlan = await prisma.lessonPlan.update({
       where: { id: existingPlan.id },
       data: { 
@@ -147,7 +148,7 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     res.json(updatedPlan);
   } catch (error) {
     console.error("ERRO NO EVALUATE:", error);
-    res.status(500).json({ error: 'Erro ao avaliar o planejamento.' });
+    res.status(500).json({ error: 'Erro interno ao avaliar o planejamento.' });
   }
 });
 
