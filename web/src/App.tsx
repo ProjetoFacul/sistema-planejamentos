@@ -29,16 +29,16 @@ export default function App() {
   const [allPlans, setAllPlans] = useState<any[]>([]);
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
 
-  // Estados do Professor (Navegação por Turma)
+  // Estados do Professor
   const [profNome, setProfNome] = useState('');
   const [disciplina, setDisciplina] = useState('Matemática');
-  const [turmaSelecionada, setTurmaSelecionada] = useState<string | null>(null); // null = tela de seleção de turmas
+  const [turmaSelecionada, setTurmaSelecionada] = useState<string | null>(null);
   const [quinzenaAtiva, setQuinzenaAtiva] = useState(listaQuinzenasPadrao[0]);
   const [semanaAtiva, setSemanaAtiva] = useState<'1' | '2' | 'todas'>('1');
   
   const [dadosPorTurmaQuinzena, setDadosPorTurmaQuinzena] = useState<any>({});
   
-  // Modal de Inspeção do Coordenador (Por Professor e Turma)
+  // Modal de Inspeção do Coordenador
   const [professorInspecionado, setProfessorInspecionado] = useState<any>(null);
   const [coordTurmaInsp, setCoordTurmaInsp] = useState(turmasFixas[0].id);
   const [coordQuinzenaFiltro, setCoordQuinzenaFiltro] = useState(listaQuinzenasPadrao[0]);
@@ -180,19 +180,23 @@ export default function App() {
       const periodIndex = listaQuinzenasPadrao.indexOf(quinzenaAtiva) + 1;
       const turmaObj = turmasFixas.find(t => t.id === turmaSelecionada);
 
+      // CARIMBO DE DADOS EXATOS NO JSON
+      const conteudoFinal = JSON.stringify({
+        ...dadosAtualizados,
+        turmaId: turmaSelecionada, // EXTREMAMENTE IMPORTANTE: Carimbo inquebrável da turma
+        turmaNome: turmaObj?.name,
+        quinzena: quinzenaAtiva,
+        disciplina,
+        profNome
+      });
+
       await axios.post(`${API}/plans`, {
         teacherId: user?.id || 1,
         teacherEmail: user?.email || email,
-        classId: 1, 
+        classCode: turmaSelecionada,
         subjectId: 1, 
         periodId: periodIndex > 0 ? periodIndex : 1, 
-        content: JSON.stringify({
-          ...dadosAtualizados,
-          turmaNome: turmaObj?.name,
-          quinzena: quinzenaAtiva,
-          disciplina,
-          profNome
-        }),
+        content: conteudoFinal,
         skills: dadosAtualizados.skills || '',
         status: 'SUBMITTED'
       });
@@ -223,7 +227,7 @@ export default function App() {
               type="email" 
               value={email} 
               onChange={e => setEmail(e.target.value)} 
-              placeholder="alex.castro@colegiovalparaiso.com" 
+              placeholder="alex.castro@colegiovalparaiso.com.br" 
               className="w-full border border-slate-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
             />
           </div>
@@ -324,7 +328,7 @@ export default function App() {
             <div className="bg-indigo-900 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-80">Total de Professores</span>
               <span className="text-3xl font-extrabold mt-2">{(allTeachers || []).length}</span>
-              <span className="text-[11px] opacity-70 mt-1">Professores cadastrados no sistema</span>
+              <span className="text-[11px] opacity-70 mt-1">Professores cadastrados</span>
             </div>
             <div className="bg-emerald-800 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-80">Planejamentos Enviados</span>
@@ -412,7 +416,6 @@ export default function App() {
         </div>
       ) : (
         <div>
-          {/* SE O PROFESSOR NÃO ESCOLHEU A TURMA AINDA */}
           {!turmaSelecionada ? (
             <div>
               <div className="bg-indigo-900 text-white p-6 rounded-2xl mb-6 shadow-md">
@@ -435,7 +438,6 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* SE O PROFESSOR JÁ ESCOLHEU A TURMA */
             <div>
               <div className="bg-indigo-50 border-l-4 border-indigo-600 p-4 rounded-r-xl mb-6 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
@@ -504,7 +506,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE INSPEÇÃO DO COORDENADOR (POR TURMA) */}
+      {/* MODAL DE INSPEÇÃO DO COORDENADOR (FILTRO BLINDADO POR JSON) */}
       {professorInspecionado && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-6xl h-[90vh] shadow-2xl border border-slate-200 flex flex-col">
@@ -523,17 +525,35 @@ export default function App() {
               {(() => {
                 const planosDoProfessor = (allPlans || []).filter((p: any) => p.teacherId === professorInspecionado.id);
                 const periodIndex = listaQuinzenasPadrao.indexOf(coordQuinzenaFiltro) + 1;
+                const turmaObjInsp = turmasFixas.find(t => t.id === coordTurmaInsp);
                 
-                const planoDaQuinzena = planosDoProfessor.find((p: any) => p.periodId === periodIndex);
+                // FILTRO BLINDADO: Ele busca EXATAMENTE o carimbo salvo no frontend
+                const planoDaTurmaEQuinzena = planosDoProfessor.find((p: any) => {
+                  const matchPeriodo = p.periodId === periodIndex;
+                  
+                  let matchJsonTurma = false;
+                  if (p.content) {
+                    try {
+                      const parsed = JSON.parse(p.content);
+                      // Verifica se o carimbo exato da turma (ex: '3S') está no JSON
+                      if (parsed.turmaId === coordTurmaInsp) {
+                        matchJsonTurma = true;
+                      }
+                    } catch(e) {}
+                  }
+
+                  // Se o carimbo do JSON bater, o filtro aceita (ignorando erros de banco)
+                  return matchPeriodo && matchJsonTurma;
+                });
 
                 let dadosInspecao = { celulasConteudo: {}, skills: '' };
-                if (planoDaQuinzena) {
-                  if (planoDaQuinzena.skills) {
-                    dadosInspecao.skills = planoDaQuinzena.skills;
+                if (planoDaTurmaEQuinzena) {
+                  if (planoDaTurmaEQuinzena.skills) {
+                    dadosInspecao.skills = planoDaTurmaEQuinzena.skills;
                   }
-                  if (planoDaQuinzena.content) {
+                  if (planoDaTurmaEQuinzena.content) {
                     try {
-                      const parsed = JSON.parse(planoDaQuinzena.content);
+                      const parsed = JSON.parse(planoDaTurmaEQuinzena.content);
                       dadosInspecao.celulasConteudo = parsed.celulasConteudo || parsed;
                       if (!dadosInspecao.skills && parsed.skills) {
                         dadosInspecao.skills = parsed.skills;
@@ -567,21 +587,21 @@ export default function App() {
                       </div>
                     </div>
 
-                    {!planoDaQuinzena ? (
+                    {!planoDaTurmaEQuinzena ? (
                       <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400 text-sm">
-                        Nenhum planejamento encontrado para este professor na <strong>{coordQuinzenaFiltro}</strong>.
+                        Nenhum planejamento enviado para a turma <strong>{turmaObjInsp?.name}</strong> na <strong>{coordQuinzenaFiltro}</strong>.
                       </div>
                     ) : (
                       <>
                         <div className="mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                          <h4 className="text-xs font-bold text-indigo-950 uppercase mb-2">Habilidades e Competências da Turma:</h4>
+                          <h4 className="text-xs font-bold text-indigo-950 uppercase mb-2">Habilidades e Competências da Turma ({turmaObjInsp?.name}):</h4>
                           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 whitespace-pre-wrap min-h-[50px]">
                             {dadosInspecao.skills || <span className="text-slate-400 italic">Nenhuma habilidade informada.</span>}
                           </div>
                         </div>
 
-                        {(coordSemanaAtiva === '1' || coordSemanaAtiva === 'todas') && renderTabelaSemanaUnica('1', `PRIMEIRA SEMANA (${coordQuinzenaFiltro})`, 'bg-indigo-900', dadosInspecao.celulasConteudo, true)}
-                        {(coordSemanaAtiva === '2' || coordSemanaAtiva === 'todas') && renderTabelaSemanaUnica('2', `SEGUNDA SEMANA (${coordQuinzenaFiltro})`, 'bg-emerald-800', dadosInspecao.celulasConteudo, true)}
+                        {(coordSemanaAtiva === '1' || coordSemanaAtiva === 'todas') && renderTabelaSemanaUnica('1', `PRIMEIRA SEMANA (${coordQuinzenaFiltro}) - ${turmaObjInsp?.name}`, 'bg-indigo-900', dadosInspecao.celulasConteudo, true)}
+                        {(coordSemanaAtiva === '2' || coordSemanaAtiva === 'todas') && renderTabelaSemanaUnica('2', `SEGUNDA SEMANA (${coordQuinzenaFiltro}) - ${turmaObjInsp?.name}`, 'bg-emerald-800', dadosInspecao.celulasConteudo, true)}
                       </>
                     )}
                   </div>
@@ -590,7 +610,7 @@ export default function App() {
             </div>
             
             <div className="p-4 border-t border-slate-200 bg-white flex justify-end shrink-0 rounded-b-2xl">
-              <button onClick={() => setProfessorInspecionado(null)} className="px-6 py-2 bg-indigo-900 text-white rounded-xl text-sm font-bold shadow-md hover:bg-indigo-950">
+              <button onClick={() => setProfessorInspecionado(null)} className="px-6 py-2 bg-indigo-900 text-white rounded-xl text-sm font-bold shadow-md hover:bg-indigo-900">
                 Fechar Inspeção
               </button>
             </div>

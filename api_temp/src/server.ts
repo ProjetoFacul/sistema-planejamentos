@@ -33,25 +33,20 @@ app.post('/api/login', async (req: any, res: any) => {
     }
     res.json(user);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Erro no servidor.' });
   }
 });
 
-// Rota para listar todos os professores cadastrados
 app.get('/api/teachers', async (req, res) => {
   try {
-    const teachers = await prisma.user.findMany({
-      where: { role: 'TEACHER' }
-    });
+    const teachers = await prisma.user.findMany({ where: { role: 'TEACHER' } });
     res.json(teachers);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Erro ao listar professores.' });
   }
 });
 
-// Rota para salvar planejamento isolado por Turma e Quinzena
+// Rota para o Professor Salvar/Enviar Planejamento
 app.post('/api/plans', async (req: any, res: any) => {
   const { teacherId, teacherEmail, classCode, subjectId, periodId, content, skills, status } = req.body;
   try {
@@ -64,69 +59,77 @@ app.post('/api/plans', async (req: any, res: any) => {
     }
 
     const nomesTurmas: any = {
-      '6A': '6º Ano A', '6B': '6º Ano B',
-      '7A': '7º Ano A', '7B': '7º Ano B',
-      '8A': '8º Ano A', '8B': '8º Ano B',
-      '9A': '9º Ano A', '9B': '9º Ano B',
+      '6A': '6º Ano A', '6B': '6º Ano B', '7A': '7º Ano A', '7B': '7º Ano B',
+      '8A': '8º Ano A', '8B': '8º Ano B', '9A': '9º Ano A', '9B': '9º Ano B',
       '1S': '1ª Série', '2S': '2ª Série', '3S': '3ª Série'
     };
-
     const nomeTurmaReal = nomesTurmas[classCode] || '6º Ano A';
 
     let turmaObj = await prisma.class.findFirst({ where: { name: nomeTurmaReal } });
-    if (!turmaObj) {
-      turmaObj = await prisma.class.create({ data: { name: nomeTurmaReal } });
-    }
+    if (!turmaObj) turmaObj = await prisma.class.create({ data: { name: nomeTurmaReal } });
 
     let defaultSubject = await prisma.subject.findFirst();
-    if (!defaultSubject) {
-      defaultSubject = await prisma.subject.create({ data: { name: 'Matemática' } });
-    }
+    if (!defaultSubject) defaultSubject = await prisma.subject.create({ data: { name: 'Matemática' } });
 
-    let validPeriodId = Number(periodId);
-    if (!validPeriodId || isNaN(validPeriodId)) {
-      validPeriodId = 1;
-    }
-
+    let validPeriodId = Number(periodId) || 1;
     await prisma.period.upsert({
-      where: { id: validPeriodId },
-      update: {},
-      create: { 
-        id: validPeriodId, 
-        name: `Quinzena ${validPeriodId}` 
-      }
+      where: { id: validPeriodId }, update: {}, create: { id: validPeriodId, name: `Quinzena ${validPeriodId}` }
     });
 
     const plan = await prisma.lessonPlan.upsert({
       where: {
         teacherId_classId_subjectId_periodId: {
-          teacherId: validTeacherId,
-          classId: turmaObj.id,
-          subjectId: defaultSubject.id,
-          periodId: validPeriodId
+          teacherId: validTeacherId, classId: turmaObj.id, subjectId: defaultSubject.id, periodId: validPeriodId
         }
       },
       update: { content, skills, status, sentAt: sentDate },
       create: { 
-        teacherId: validTeacherId, 
-        classId: turmaObj.id, 
-        subjectId: defaultSubject.id, 
-        periodId: validPeriodId, 
-        content, 
-        skills,
-        status, 
-        sentAt: sentDate 
+        teacherId: validTeacherId, classId: turmaObj.id, subjectId: defaultSubject.id, periodId: validPeriodId, 
+        content, skills, status, sentAt: sentDate 
       }
     });
-
     res.json(plan);
   } catch (error) {
-    console.error("ERRO NO PRISMA:", error);
     res.status(400).json({ error: 'Erro ao salvar planejamento.' });
   }
 });
 
-// Rota para listar todos os planejamentos incluindo dados da Turma e Professor
+// NOVA ROTA: Avaliação do Coordenador (Aprovar ou Devolver)
+app.post('/api/plans/evaluate', async (req: any, res: any) => {
+  const { teacherId, classNome, periodId, status, feedback } = req.body;
+  try {
+    let turmaObj = await prisma.class.findFirst({ where: { name: classNome } });
+    let defaultSubject = await prisma.subject.findFirst();
+
+    if (!turmaObj || !defaultSubject) return res.status(404).json({ error: 'Dados base não encontrados.' });
+
+    const existingPlan = await prisma.lessonPlan.findUnique({
+      where: {
+        teacherId_classId_subjectId_periodId: {
+          teacherId: Number(teacherId), classId: turmaObj.id, subjectId: defaultSubject.id, periodId: Number(periodId)
+        }
+      }
+    });
+
+    if (!existingPlan) return res.status(404).json({ error: 'Planejamento não encontrado no banco.' });
+
+    let parsedContent: any = {};
+    try { parsedContent = JSON.parse(existingPlan.content); } catch (e) {}
+    
+    // Injeta o feedback dentro do JSON
+    parsedContent.coordinatorFeedback = feedback;
+
+    const updatedPlan = await prisma.lessonPlan.update({
+      where: { id: existingPlan.id },
+      data: { status: status, content: JSON.stringify(parsedContent) }
+    });
+
+    res.json(updatedPlan);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao avaliar o planejamento.' });
+  }
+});
+
 app.get('/api/plans', async (req, res) => {
   try {
     const plans = await prisma.lessonPlan.findMany({
@@ -134,7 +137,6 @@ app.get('/api/plans', async (req, res) => {
     });
     res.json(plans);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Erro ao listar planejamentos.' });
   }
 });
