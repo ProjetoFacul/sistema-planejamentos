@@ -95,7 +95,7 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// Rota de Avaliação do Coordenador Totalmente Blindada
+// Rota de Avaliação do Coordenador com Tratamento Flexível de Turma
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
   const { teacherId, classCode, classNome, periodId, status, feedback } = req.body;
   try {
@@ -105,7 +105,6 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
       '1S': '1ª Série', '2S': '2ª Série', '3S': '3ª Série'
     };
     
-    // Descobre o nome real da turma aceitando tanto código abreviado quanto nome direto
     const identificadorTurma = classCode || classNome || '6A';
     const nomeTurmaReal = nomesTurmas[identificadorTurma] || identificadorTurma;
 
@@ -159,6 +158,7 @@ app.get('/api/plans', async (req, res) => {
     });
     res.json(plans);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Erro ao listar planejamentos.' });
   }
 });
