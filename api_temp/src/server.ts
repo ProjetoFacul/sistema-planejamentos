@@ -63,7 +63,6 @@ app.post('/api/plans', async (req: any, res: any) => {
       if (teacher) validTeacherId = teacher.id;
     }
 
-    // Mapeia o código da turma (ex: '6A') para o banco de dados
     const nomesTurmas: any = {
       '6A': '6º Ano A', '6B': '6º Ano B',
       '7A': '7º Ano A', '7B': '7º Ano B',
@@ -98,7 +97,6 @@ app.post('/api/plans', async (req: any, res: any) => {
       }
     });
 
-    // O upsert garante que a chave única (professor + turma + disciplina + quinzena) atualize exatamente o registro correspondente
     const plan = await prisma.lessonPlan.upsert({
       where: {
         teacherId_classId_subjectId_periodId: {
@@ -128,7 +126,7 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// Rota para listar todos os planejamentos
+// Rota para listar todos os planejamentos incluindo dados da Turma e Professor
 app.get('/api/plans', async (req, res) => {
   try {
     const plans = await prisma.lessonPlan.findMany({
