@@ -94,7 +94,7 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// NOVA ROTA: Avaliação do Coordenador (Aprovar ou Devolver)
+// Rota de Avaliação (CORRIGIDA COM CHAVE COMPOSTA)
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
   const { teacherId, classNome, periodId, status, feedback } = req.body;
   try {
@@ -103,12 +103,15 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
 
     if (!turmaObj || !defaultSubject) return res.status(404).json({ error: 'Dados base não encontrados.' });
 
+    const queryKey = {
+      teacherId: Number(teacherId), 
+      classId: turmaObj.id, 
+      subjectId: defaultSubject.id, 
+      periodId: Number(periodId)
+    };
+
     const existingPlan = await prisma.lessonPlan.findUnique({
-      where: {
-        teacherId_classId_subjectId_periodId: {
-          teacherId: Number(teacherId), classId: turmaObj.id, subjectId: defaultSubject.id, periodId: Number(periodId)
-        }
-      }
+      where: { teacherId_classId_subjectId_periodId: queryKey }
     });
 
     if (!existingPlan) return res.status(404).json({ error: 'Planejamento não encontrado no banco.' });
@@ -119,13 +122,15 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     // Injeta o feedback dentro do JSON
     parsedContent.coordinatorFeedback = feedback;
 
+    // Atualiza usando a chave composta exata
     const updatedPlan = await prisma.lessonPlan.update({
-      where: { id: existingPlan.id },
+      where: { teacherId_classId_subjectId_periodId: queryKey },
       data: { status: status, content: JSON.stringify(parsedContent) }
     });
 
     res.json(updatedPlan);
   } catch (error) {
+    console.error("ERRO NO EVALUATE:", error);
     res.status(500).json({ error: 'Erro ao avaliar o planejamento.' });
   }
 });
