@@ -95,7 +95,7 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// Rota de Avaliação do Coordenador Blindada
+// Rota de Avaliação do Coordenador Blindada (Usando ID direto)
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
   const { teacherId, classCode, periodId, status, feedback } = req.body;
   try {
@@ -109,29 +109,39 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     let turmaObj = await prisma.class.findFirst({ where: { name: nomeTurmaReal } });
     let defaultSubject = await prisma.subject.findFirst();
 
-    if (!turmaObj || !defaultSubject) return res.status(404).json({ error: 'Dados base não encontrados.' });
+    if (!turmaObj) {
+      turmaObj = await prisma.class.create({ data: { name: nomeTurmaReal } });
+    }
+    if (!defaultSubject) {
+      defaultSubject = await prisma.subject.create({ data: { name: 'Matemática' } });
+    }
 
-    const queryKey = {
-      teacherId: Number(teacherId), 
-      classId: turmaObj.id, 
-      subjectId: defaultSubject.id, 
-      periodId: Number(periodId)
-    };
-
-    const existingPlan = await prisma.lessonPlan.findUnique({
-      where: { teacherId_classId_subjectId_periodId: queryKey }
+    // Busca segura utilizando findFirst para evitar erros de chave composta
+    const existingPlan = await prisma.lessonPlan.findFirst({
+      where: {
+        teacherId: Number(teacherId),
+        classId: turmaObj.id,
+        subjectId: defaultSubject.id,
+        periodId: Number(periodId)
+      }
     });
 
-    if (!existingPlan) return res.status(404).json({ error: 'Planejamento não encontrado no banco.' });
+    if (!existingPlan) {
+      return res.status(404).json({ error: 'Planejamento não encontrado no banco.' });
+    }
 
     let parsedContent: any = {};
     try { parsedContent = JSON.parse(existingPlan.content); } catch (e) {}
     
     parsedContent.coordinatorFeedback = feedback;
 
+    // Atualiza diretamente pelo ID primário do registro encontrado
     const updatedPlan = await prisma.lessonPlan.update({
-      where: { teacherId_classId_subjectId_periodId: queryKey },
-      data: { status: status, content: JSON.stringify(parsedContent) }
+      where: { id: existingPlan.id },
+      data: { 
+        status: status, 
+        content: JSON.stringify(parsedContent) 
+      }
     });
 
     res.json(updatedPlan);
