@@ -90,15 +90,23 @@ app.post('/api/plans', async (req: any, res: any) => {
     });
     res.json(plan);
   } catch (error) {
+    console.error("ERRO AO SALVAR:", error);
     res.status(400).json({ error: 'Erro ao salvar planejamento.' });
   }
 });
 
-// Rota de Avaliação (CORRIGIDA COM CHAVE COMPOSTA)
+// Rota de Avaliação do Coordenador Blindada
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
-  const { teacherId, classNome, periodId, status, feedback } = req.body;
+  const { teacherId, classCode, periodId, status, feedback } = req.body;
   try {
-    let turmaObj = await prisma.class.findFirst({ where: { name: classNome } });
+    const nomesTurmas: any = {
+      '6A': '6º Ano A', '6B': '6º Ano B', '7A': '7º Ano A', '7B': '7º Ano B',
+      '8A': '8º Ano A', '8B': '8º Ano B', '9A': '9º Ano A', '9B': '9º Ano B',
+      '1S': '1ª Série', '2S': '2ª Série', '3S': '3ª Série'
+    };
+    const nomeTurmaReal = nomesTurmas[classCode] || '6º Ano A';
+
+    let turmaObj = await prisma.class.findFirst({ where: { name: nomeTurmaReal } });
     let defaultSubject = await prisma.subject.findFirst();
 
     if (!turmaObj || !defaultSubject) return res.status(404).json({ error: 'Dados base não encontrados.' });
@@ -119,10 +127,8 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     let parsedContent: any = {};
     try { parsedContent = JSON.parse(existingPlan.content); } catch (e) {}
     
-    // Injeta o feedback dentro do JSON
     parsedContent.coordinatorFeedback = feedback;
 
-    // Atualiza usando a chave composta exata
     const updatedPlan = await prisma.lessonPlan.update({
       where: { teacherId_classId_subjectId_periodId: queryKey },
       data: { status: status, content: JSON.stringify(parsedContent) }
