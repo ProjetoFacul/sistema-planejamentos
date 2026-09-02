@@ -8,13 +8,13 @@ const prisma = new PrismaClient();
 app.use(cors());
 app.use(express.json());
 
-// Rota de Login Institucional
+// Rota de Login Institucional com suporte a .com.br
 app.post('/api/login', async (req: any, res: any) => {
   const { email, password } = req.body;
   try {
     let user: any = await prisma.user.findUnique({ where: { email } });
     
-    if (!user && email && email.includes('@colegiovalparaiso.com')) {
+    if (!user && email && email.includes('@colegiovalparaiso.com.br')) {
       const isCoord = email.includes('coord') || email.includes('coordenacao');
       const nomeGerado = email.split('@')[0].split('.').map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
       
@@ -51,7 +51,7 @@ app.get('/api/teachers', async (req, res) => {
   }
 });
 
-// Rota para salvar planejamento (com suporte a skills)
+// Rota para salvar planejamento
 app.post('/api/plans', async (req: any, res: any) => {
   const { teacherId, teacherEmail, classId, subjectId, periodId, content, skills, status } = req.body;
   try {

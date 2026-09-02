@@ -29,16 +29,18 @@ export default function App() {
   const [allPlans, setAllPlans] = useState<any[]>([]);
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
 
-  // Estados do Professor
+  // Estados do Professor (Navegação por Turma)
   const [profNome, setProfNome] = useState('');
   const [disciplina, setDisciplina] = useState('Matemática');
+  const [turmaSelecionada, setTurmaSelecionada] = useState<string | null>(null); // null = tela de seleção de turmas
   const [quinzenaAtiva, setQuinzenaAtiva] = useState(listaQuinzenasPadrao[0]);
   const [semanaAtiva, setSemanaAtiva] = useState<'1' | '2' | 'todas'>('1');
   
-  const [dadosPorQuinzena, setDadosPorQuinzena] = useState<any>({});
+  const [dadosPorTurmaQuinzena, setDadosPorTurmaQuinzena] = useState<any>({});
   
-  // Modal de Inspeção do Coordenador e Filtros do Dashboard
+  // Modal de Inspeção do Coordenador (Por Professor e Turma)
   const [professorInspecionado, setProfessorInspecionado] = useState<any>(null);
+  const [coordTurmaInsp, setCoordTurmaInsp] = useState(turmasFixas[0].id);
   const [coordQuinzenaFiltro, setCoordQuinzenaFiltro] = useState(listaQuinzenasPadrao[0]);
   const [coordSemanaAtiva, setCoordSemanaAtiva] = useState<'1' | '2' | 'todas'>('todas');
   const [filtroBuscaProf, setFiltroBuscaProf] = useState('');
@@ -52,9 +54,9 @@ export default function App() {
           setUser(parsed);
           if (parsed.name) setProfNome(parsed.name);
           
-          const savedRascunhos = localStorage.getItem(`rascunhos_${parsed.id}`);
+          const savedRascunhos = localStorage.getItem(`rascunhos_turmas_${parsed.id}`);
           if (savedRascunhos) {
-            setDadosPorQuinzena(JSON.parse(savedRascunhos));
+            setDadosPorTurmaQuinzena(JSON.parse(savedRascunhos));
           }
         }
       }
@@ -90,41 +92,43 @@ export default function App() {
     }
 
     try {
-      console.log("Tentando logar em:", `${API}/login`, { email, password });
       const res = await axios.post(`${API}/login`, { email, password });
-      console.log("Resposta do login:", res.data);
-      
       if (res && res.data) {
         setUser(res.data);
         localStorage.setItem('user', JSON.stringify(res.data));
         if (res.data.name) setProfNome(res.data.name);
 
-        const savedRascunhos = localStorage.getItem(`rascunhos_${res.data.id}`);
+        const savedRascunhos = localStorage.getItem(`rascunhos_turmas_${res.data.id}`);
         if (savedRascunhos) {
-          setDadosPorQuinzena(JSON.parse(savedRascunhos));
+          setDadosPorTurmaQuinzena(JSON.parse(savedRascunhos));
         }
 
         carregarDadosServidor();
       }
     } catch (err: any) {
-      console.error("Erro detalhado no login:", err?.response || err);
       setErroLogin('E-mail institucional ou senha incorretos.');
     }
   };
 
-  const handleCellChange = (semana: string, turmaId: string, dia: string, valor: string) => {
-    setDadosPorQuinzena((prev: any) => {
+  const getChaveDados = (turmaId: string, quinzena: string) => `${turmaId}_${quinzena}`;
+
+  const handleCellChange = (semana: string, dia: string, valor: string) => {
+    if (!turmaSelecionada) return;
+    const chaveUnica = getChaveDados(turmaSelecionada, quinzenaAtiva);
+
+    setDadosPorTurmaQuinzena((prev: any) => {
       const safePrev = prev || {};
-      const quinzenaAtualDados = safePrev[quinzenaAtiva] || { celulasConteudo: {} };
-      const celulas = { ...(quinzenaAtualDados.celulasConteudo || {}) };
+      const dadosAtuais = safePrev[chaveUnica] || { celulasConteudo: {}, skills: '' };
+      const celulas = { ...(dadosAtuais.celulasConteudo || {}) };
       
-      const chave = `s${semana}_${turmaId}_${dia}`;
-      celulas[chave] = valor;
+      const chaveCelula = `s${semana}_${dia}`;
+      celulas[chaveCelula] = valor;
 
       const novosDados = {
         ...safePrev,
-        [quinzenaAtiva]: {
-          ...quinzenaAtualDados,
+        [chaveUnica]: {
+          ...dadosAtuais,
+          turmaId: turmaSelecionada,
           quinzena: quinzenaAtiva,
           disciplina,
           profNome,
@@ -133,17 +137,48 @@ export default function App() {
       };
 
       if (user?.id) {
-        localStorage.setItem(`rascunhos_${user.id}`, JSON.stringify(novosDados));
+        localStorage.setItem(`rascunhos_turmas_${user.id}`, JSON.stringify(novosDados));
       }
 
       return novosDados;
     });
   };
 
-  const enviarPlanejamento = async () => {
+  const handleSkillsChange = (valor: string) => {
+    if (!turmaSelecionada) return;
+    const chaveUnica = getChaveDados(turmaSelecionada, quinzenaAtiva);
+
+    setDadosPorTurmaQuinzena((prev: any) => {
+      const safePrev = prev || {};
+      const dadosAtuais = safePrev[chaveUnica] || { celulasConteudo: {}, skills: '' };
+
+      const novosDados = {
+        ...safePrev,
+        [chaveUnica]: {
+          ...dadosAtuais,
+          turmaId: turmaSelecionada,
+          quinzena: quinzenaAtiva,
+          disciplina,
+          profNome,
+          skills: valor
+        }
+      };
+
+      if (user?.id) {
+        localStorage.setItem(`rascunhos_turmas_${user.id}`, JSON.stringify(novosDados));
+      }
+
+      return novosDados;
+    });
+  };
+
+  const enviarPlanejamentoTurma = async () => {
+    if (!turmaSelecionada) return;
     try {
-      const dadosAtualizados = (dadosPorQuinzena && dadosPorQuinzena[quinzenaAtiva]) || { celulasConteudo: {} };
+      const chaveUnica = getChaveDados(turmaSelecionada, quinzenaAtiva);
+      const dadosAtualizados = dadosPorTurmaQuinzena[chaveUnica] || { celulasConteudo: {}, skills: '' };
       const periodIndex = listaQuinzenasPadrao.indexOf(quinzenaAtiva) + 1;
+      const turmaObj = turmasFixas.find(t => t.id === turmaSelecionada);
 
       await axios.post(`${API}/plans`, {
         teacherId: user?.id || 1,
@@ -153,16 +188,17 @@ export default function App() {
         periodId: periodIndex > 0 ? periodIndex : 1, 
         content: JSON.stringify({
           ...dadosAtualizados,
+          turmaNome: turmaObj?.name,
           quinzena: quinzenaAtiva,
           disciplina,
           profNome
         }),
+        skills: dadosAtualizados.skills || '',
         status: 'SUBMITTED'
       });
-      alert(`Planejamento referente à [${quinzenaAtiva}] enviado com sucesso para a coordenação!`);
+      alert(`Planejamento da turma [${turmaObj?.name}] para a [${quinzenaAtiva}] enviado com sucesso!`);
       carregarDadosServidor();
     } catch (err: any) {
-      console.error("Erro detalhado:", err?.response?.data || err);
       alert('Erro ao enviar planejamento. Verifique o console.');
     }
   };
@@ -171,7 +207,6 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-100 p-4 font-sans">
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
-          
           <div className="flex flex-col items-center text-center mb-6">
             <div className="w-20 h-20 rounded-full bg-transparent flex items-center justify-center p-0 mb-3 overflow-hidden">
               <img src={LogoCaminho} alt="Colégio Valparaíso" className="w-full h-full object-fill" />
@@ -211,19 +246,12 @@ export default function App() {
           >
             Entrar no Sistema
           </button>
-          
-          <div className="mt-4 text-center text-xs text-slate-500 space-y-1">
-            <p>Prof: <span className="font-mono font-bold text-slate-700">alex.castro@colegiovalparaiso.com</span> / 123</p>
-            <p>Coord: <span className="font-mono font-bold text-slate-700">coord@colegiovalparaiso.com</span> / 123</p>
-          </div>
         </div>
       </div>
     );
   }
 
-  const dadosQuinzenaAtual = (dadosPorQuinzena && dadosPorQuinzena[quinzenaAtiva]) || { celulasConteudo: {} };
-
-  const renderTabelaSemana = (semanaNum: string, titulo: string, corHeader: string, dadosConteudo: any, modoLeitura: boolean = false) => {
+  const renderTabelaSemanaUnica = (semanaNum: string, titulo: string, corHeader: string, dadosConteudo: any, modoLeitura: boolean = false) => {
     const safeConteudo = dadosConteudo || {};
     return (
       <div className="mb-8">
@@ -232,39 +260,35 @@ export default function App() {
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-center">
-                <th className="p-3 border-r w-24">Turmas</th>
                 {dias.map(d => <th key={d} className="p-3 border-r capitalize">{d}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {turmasFixas.map(t => (
-                <tr key={`s${semanaNum}-${t.id}`} className="border-b">
-                  <td className="p-3 font-bold bg-slate-50 text-center border-r">{t.name}</td>
-                  {dias.map(d => {
-                    const chave = `s${semanaNum}_${t.id}_${d}`;
-                    const valorCel = safeConteudo[chave] || '';
+              <tr>
+                {dias.map(d => {
+                  const chave = `s${semanaNum}_${d}`;
+                  const valorCel = safeConteudo[chave] || '';
 
-                    if (modoLeitura) {
-                      return (
-                        <td key={d} className="p-3 border-r h-20 align-top whitespace-pre-wrap bg-slate-50/50">
-                          {valorCel || <span className="text-slate-300 italic">-</span>}
-                        </td>
-                      );
-                    }
-
+                  if (modoLeitura) {
                     return (
-                      <td key={d} className="p-1 border-r h-24 align-top">
-                        <textarea
-                          value={valorCel}
-                          onChange={(e) => handleCellChange(semanaNum, t.id, d, e.target.value)}
-                          placeholder="Conteúdo..."
-                          className="w-full h-full min-h-[80px] p-2 text-xs outline-none resize-none bg-transparent focus:bg-amber-50 rounded"
-                        />
+                      <td key={d} className="p-3 border-r h-24 align-top whitespace-pre-wrap bg-slate-50/50">
+                        {valorCel || <span className="text-slate-300 italic">-</span>}
                       </td>
                     );
-                  })}
-                </tr>
-              ))}
+                  }
+
+                  return (
+                    <td key={d} className="p-1 border-r h-28 align-top">
+                      <textarea
+                        value={valorCel}
+                        onChange={(e) => handleCellChange(semanaNum, d, e.target.value)}
+                        placeholder="Conteúdo do dia..."
+                        className="w-full h-full min-h-[90px] p-2 text-xs outline-none resize-none bg-transparent focus:bg-amber-50 rounded"
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
         </div>
@@ -282,7 +306,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">COLÉGIO VALPARAÍSO</h1>
-            <p className="text-xs md:text-sm font-semibold text-indigo-600 uppercase">Sistema de Planejamento Quinzenal</p>
+            <p className="text-xs md:text-sm font-semibold text-indigo-600 uppercase">Sistema de Planejamento Quinzenal por Turma</p>
           </div>
         </div>
 
@@ -305,7 +329,7 @@ export default function App() {
             <div className="bg-emerald-800 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-80">Planejamentos Enviados</span>
               <span className="text-3xl font-extrabold mt-2">{(allPlans || []).length}</span>
-              <span className="text-[11px] opacity-70 mt-1">Total de quinzenas submetidas</span>
+              <span className="text-[11px] opacity-70 mt-1">Total de envios realizados</span>
             </div>
             <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-80">Status do Banco</span>
@@ -318,7 +342,7 @@ export default function App() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-extrabold text-indigo-950">Acompanhamento do Corpo Docente</h2>
-                <p className="text-xs text-slate-600 mt-0.5">Visualize a lista de professores e verifique o status de envio dos planejamentos.</p>
+                <p className="text-xs text-slate-600 mt-0.5">Selecione um professor para inspecionar os planejamentos separados por turma e quinzena.</p>
               </div>
               <div className="w-full md:w-72">
                 <input 
@@ -364,7 +388,7 @@ export default function App() {
                             <td className="p-3.5 text-center">
                               {qtdEnvios > 0 ? (
                                 <span className="bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-full border border-emerald-200 text-[10px]">
-                                  {qtdEnvios} {qtdEnvios === 1 ? 'Quinzena enviada' : 'Quinzenas enviadas'}
+                                  {qtdEnvios} {qtdEnvios === 1 ? 'Planejamento enviado' : 'Planejamentos enviados'}
                                 </span>
                               ) : (
                                 <span className="bg-amber-50 text-amber-700 font-bold px-2.5 py-1 rounded-full border border-amber-200 text-[10px]">
@@ -374,7 +398,7 @@ export default function App() {
                             </td>
                             <td className="p-3.5 text-center">
                               <button onClick={() => setProfessorInspecionado(t)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs shadow-sm transition-all">
-                                🔍 Inspecionar Planejamentos
+                                🔍 Inspecionar por Turma
                               </button>
                             </td>
                           </tr>
@@ -388,51 +412,106 @@ export default function App() {
         </div>
       ) : (
         <div>
-          <div className="bg-indigo-50 border-l-4 border-indigo-600 p-4 rounded-r-xl mb-6 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-sm text-slate-700">
-              <strong className="text-indigo-900">Workspace do Professor:</strong> Suas alterações são salvas automaticamente como rascunho neste navegador. Escolha a quinzena, preencha e clique em enviar.
-            </div>
-            <button onClick={enviarPlanejamento} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl text-xs shadow">
-              Enviar Quinzena Selecionada
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          {/* SE O PROFESSOR NÃO ESCOLHEU A TURMA AINDA */}
+          {!turmaSelecionada ? (
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Professor(a):</label>
-              <input type="text" value={profNome} readOnly className="w-full bg-slate-200 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-slate-700 cursor-not-allowed" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Disciplina:</label>
-              <input type="text" value={disciplina} onChange={e => setDisciplina(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Escolha a Quinzena:</label>
-              <select value={quinzenaAtiva} onChange={e => setQuinzenaAtiva(e.target.value)} className="w-full bg-indigo-900 text-white border border-indigo-900 rounded-lg p-2.5 text-sm font-semibold outline-none shadow-sm cursor-pointer">
-                {listaQuinzenasPadrao.map(q => <option key={q} value={q}>{q}</option>)}
-              </select>
-            </div>
-          </div>
+              <div className="bg-indigo-900 text-white p-6 rounded-2xl mb-6 shadow-md">
+                <h2 className="text-xl font-black mb-1">Selecione a Turma para Planejamento</h2>
+                <p className="text-xs opacity-80">Escolha abaixo qual turma você deseja planejar. Cada turma possui seu planejamento e cronograma exclusivos.</p>
+              </div>
 
-          <div className="flex bg-slate-200 p-1 rounded-xl gap-1 mb-4 w-fit">
-            <button onClick={() => setSemanaAtiva('1')} className={`px-4 py-2 rounded-lg text-xs font-bold ${semanaAtiva === '1' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Preencher Semana 1</button>
-            <button onClick={() => setSemanaAtiva('2')} className={`px-4 py-2 rounded-lg text-xs font-bold ${semanaAtiva === '2' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Preencher Semana 2</button>
-            <button onClick={() => setSemanaAtiva('todas')} className={`px-4 py-2 rounded-lg text-xs font-bold ${semanaAtiva === 'todas' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Ver Ambas</button>
-          </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {turmasFixas.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTurmaSelecionada(t.id)}
+                    className="bg-white hover:bg-indigo-50 border-2 border-slate-200 hover:border-indigo-600 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-center text-center group cursor-pointer"
+                  >
+                    <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">📚</span>
+                    <span className="text-base font-extrabold text-indigo-950">{t.name}</span>
+                    <span className="text-[11px] text-slate-400 mt-1">Clique para planejar</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* SE O PROFESSOR JÁ ESCOLHEU A TURMA */
+            <div>
+              <div className="bg-indigo-50 border-l-4 border-indigo-600 p-4 rounded-r-xl mb-6 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setTurmaSelecionada(null)}
+                    className="bg-white text-indigo-900 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-100 shadow-sm"
+                  >
+                    ← Voltar às Turmas
+                  </button>
+                  <div className="text-xs text-slate-700">
+                    <strong className="text-indigo-900">Turma Ativa:</strong> <span className="bg-indigo-900 text-white px-2 py-0.5 rounded font-bold">{turmasFixas.find(t => t.id === turmaSelecionada)?.name}</span>
+                  </div>
+                </div>
+                <button onClick={enviarPlanejamentoTurma} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl text-xs shadow">
+                  Enviar Planejamento desta Turma
+                </button>
+              </div>
 
-          {(semanaAtiva === '1' || semanaAtiva === 'todas') && renderTabelaSemana('1', `PRIMEIRA SEMANA (${quinzenaAtiva})`, 'bg-indigo-900', dadosQuinzenaAtual.celulasConteudo, false)}
-          {(semanaAtiva === '2' || semanaAtiva === 'todas') && renderTabelaSemana('2', `SEGUNDA SEMANA (${quinzenaAtiva})`, 'bg-emerald-800', dadosQuinzenaAtual.celulasConteudo, false)}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Professor(a):</label>
+                  <input type="text" value={profNome} readOnly className="w-full bg-slate-200 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-slate-700 cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Disciplina:</label>
+                  <input type="text" value={disciplina} onChange={e => setDisciplina(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Escolha a Quinzena:</label>
+                  <select value={quinzenaAtiva} onChange={e => setQuinzenaAtiva(e.target.value)} className="w-full bg-indigo-900 text-white border border-indigo-900 rounded-lg p-2.5 text-sm font-semibold outline-none shadow-sm cursor-pointer">
+                    {listaQuinzenasPadrao.map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* CAMPO DE HABILIDADES EXCLUSIVO DESTA TURMA */}
+              <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Habilidades e Competências da Turma ({turmasFixas.find(t => t.id === turmaSelecionada)?.name}) - {quinzenaAtiva}:
+                </label>
+                <textarea
+                  value={((dadosPorTurmaQuinzena[getChaveDados(turmaSelecionada, quinzenaAtiva)] || {}).skills) || ''}
+                  onChange={e => handleSkillsChange(e.target.value)}
+                  placeholder="Digite as habilidades e competências específicas trabalhadas com esta turma nesta quinzena..."
+                  className="w-full h-24 p-3 text-xs border border-slate-300 rounded-lg outline-none bg-white focus:ring-2 focus:ring-indigo-500 resize-none shadow-sm"
+                />
+              </div>
+
+              <div className="flex bg-slate-200 p-1 rounded-xl gap-1 mb-4 w-fit">
+                <button onClick={() => setSemanaAtiva('1')} className={`px-4 py-2 rounded-lg text-xs font-bold ${semanaAtiva === '1' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Preencher Semana 1</button>
+                <button onClick={() => setSemanaAtiva('2')} className={`px-4 py-2 rounded-lg text-xs font-bold ${semanaAtiva === '2' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Preencher Semana 2</button>
+                <button onClick={() => setSemanaAtiva('todas')} className={`px-4 py-2 rounded-lg text-xs font-bold ${semanaAtiva === 'todas' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Ver Ambas</button>
+              </div>
+
+              {(() => {
+                const dadosAtuaisTurma = dadosPorTurmaQuinzena[getChaveDados(turmaSelecionada, quinzenaAtiva)] || { celulasConteudo: {} };
+                return (
+                  <>
+                    {(semanaAtiva === '1' || semanaAtiva === 'todas') && renderTabelaSemanaUnica('1', `PRIMEIRA SEMANA (${quinzenaAtiva}) - ${turmasFixas.find(t => t.id === turmaSelecionada)?.name}`, 'bg-indigo-900', dadosAtuaisTurma.celulasConteudo, false)}
+                    {(semanaAtiva === '2' || semanaAtiva === 'todas') && renderTabelaSemanaUnica('2', `SEGUNDA SEMANA (${quinzenaAtiva}) - ${turmasFixas.find(t => t.id === turmaSelecionada)?.name}`, 'bg-emerald-800', dadosAtuaisTurma.celulasConteudo, false)}
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </div>
       )}
 
-      {/* MODAL DE INSPEÇÃO DO COORDENADOR */}
+      {/* MODAL DE INSPEÇÃO DO COORDENADOR (POR TURMA) */}
       {professorInspecionado && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-6xl h-[90vh] shadow-2xl border border-slate-200 flex flex-col">
             
             <div className="flex justify-between items-center p-6 border-b border-slate-200 shrink-0 bg-slate-50 rounded-t-2xl">
               <div>
-                <h3 className="text-xl font-black text-indigo-950">Inspeção do Planejamento por Quinzena</h3>
+                <h3 className="text-xl font-black text-indigo-950">Inspeção de Planejamento por Turma</h3>
                 <p className="text-xs text-slate-500 mt-1">
                   <strong>Professor(a):</strong> {professorInspecionado.name} | <strong>E-mail:</strong> {professorInspecionado.email}
                 </p>
@@ -447,24 +526,40 @@ export default function App() {
                 
                 const planoDaQuinzena = planosDoProfessor.find((p: any) => p.periodId === periodIndex);
 
-                let dadosQuinzenaSelecionada = {};
-                if (planoDaQuinzena && planoDaQuinzena.content) {
-                  try {
-                    const parsed = JSON.parse(planoDaQuinzena.content);
-                    dadosQuinzenaSelecionada = parsed.celulasConteudo || parsed;
-                  } catch(e) {}
+                let dadosInspecao = { celulasConteudo: {}, skills: '' };
+                if (planoDaQuinzena) {
+                  if (planoDaQuinzena.skills) {
+                    dadosInspecao.skills = planoDaQuinzena.skills;
+                  }
+                  if (planoDaQuinzena.content) {
+                    try {
+                      const parsed = JSON.parse(planoDaQuinzena.content);
+                      dadosInspecao.celulasConteudo = parsed.celulasConteudo || parsed;
+                      if (!dadosInspecao.skills && parsed.skills) {
+                        dadosInspecao.skills = parsed.skills;
+                      }
+                    } catch(e) {}
+                  }
                 }
 
                 return (
                   <div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                       <div>
-                        <span className="text-[11px] font-bold uppercase text-slate-400 block">Selecionar Quinzena para Inspeção:</span>
-                        <select value={coordQuinzenaFiltro} onChange={e => setCoordQuinzenaFiltro(e.target.value)} className="bg-indigo-900 text-white font-bold text-xs px-3 py-2 rounded-lg outline-none mt-1">
+                        <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Selecionar Turma:</span>
+                        <select value={coordTurmaInsp} onChange={e => setCoordTurmaInsp(e.target.value)} className="w-full bg-indigo-900 text-white font-bold text-xs px-3 py-2.5 rounded-lg outline-none">
+                          {turmasFixas.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Selecionar Quinzena:</span>
+                        <select value={coordQuinzenaFiltro} onChange={e => setCoordQuinzenaFiltro(e.target.value)} className="w-full bg-indigo-900 text-white font-bold text-xs px-3 py-2.5 rounded-lg outline-none">
                           {listaQuinzenasPadrao.map(q => <option key={q} value={q}>{q}</option>)}
                         </select>
                       </div>
+                    </div>
 
+                    <div className="flex justify-end mb-4">
                       <div className="flex bg-slate-200 p-1 rounded-xl gap-1">
                         <button onClick={() => setCoordSemanaAtiva('1')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${coordSemanaAtiva === '1' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600'}`}>Ver Semana 1</button>
                         <button onClick={() => setCoordSemanaAtiva('2')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${coordSemanaAtiva === '2' ? 'bg-white text-indigo-950 shadow' : 'text-slate-600'}`}>Ver Semana 2</button>
@@ -474,12 +569,19 @@ export default function App() {
 
                     {!planoDaQuinzena ? (
                       <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400 text-sm">
-                        Nenhum planejamento enviado por este professor para a <strong>{coordQuinzenaFiltro}</strong>.
+                        Nenhum planejamento encontrado para este professor na <strong>{coordQuinzenaFiltro}</strong>.
                       </div>
                     ) : (
                       <>
-                        {(coordSemanaAtiva === '1' || coordSemanaAtiva === 'todas') && renderTabelaSemana('1', `PRIMEIRA SEMANA (${coordQuinzenaFiltro})`, 'bg-indigo-900', dadosQuinzenaSelecionada, true)}
-                        {(coordSemanaAtiva === '2' || coordSemanaAtiva === 'todas') && renderTabelaSemana('2', `SEGUNDA SEMANA (${coordQuinzenaFiltro})`, 'bg-emerald-800', dadosQuinzenaSelecionada, true)}
+                        <div className="mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                          <h4 className="text-xs font-bold text-indigo-950 uppercase mb-2">Habilidades e Competências da Turma:</h4>
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 whitespace-pre-wrap min-h-[50px]">
+                            {dadosInspecao.skills || <span className="text-slate-400 italic">Nenhuma habilidade informada.</span>}
+                          </div>
+                        </div>
+
+                        {(coordSemanaAtiva === '1' || coordSemanaAtiva === 'todas') && renderTabelaSemanaUnica('1', `PRIMEIRA SEMANA (${coordQuinzenaFiltro})`, 'bg-indigo-900', dadosInspecao.celulasConteudo, true)}
+                        {(coordSemanaAtiva === '2' || coordSemanaAtiva === 'todas') && renderTabelaSemanaUnica('2', `SEGUNDA SEMANA (${coordQuinzenaFiltro})`, 'bg-emerald-800', dadosInspecao.celulasConteudo, true)}
                       </>
                     )}
                   </div>
