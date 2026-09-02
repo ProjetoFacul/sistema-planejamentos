@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 app.use(cors());
 app.use(express.json());
 
-// Rota de Login Institucional com suporte a .com.br
+// Rota de Login Institucional
 app.post('/api/login', async (req: any, res: any) => {
   const { email, password } = req.body;
   try {
@@ -51,9 +51,9 @@ app.get('/api/teachers', async (req, res) => {
   }
 });
 
-// Rota para salvar planejamento
+// Rota para salvar planejamento isolado por Turma e Quinzena
 app.post('/api/plans', async (req: any, res: any) => {
-  const { teacherId, teacherEmail, classId, subjectId, periodId, content, skills, status } = req.body;
+  const { teacherId, teacherEmail, classCode, subjectId, periodId, content, skills, status } = req.body;
   try {
     const sentDate = status === 'SUBMITTED' ? new Date() : null;
 
@@ -63,9 +63,20 @@ app.post('/api/plans', async (req: any, res: any) => {
       if (teacher) validTeacherId = teacher.id;
     }
 
-    let defaultClass = await prisma.class.findFirst();
-    if (!defaultClass) {
-      defaultClass = await prisma.class.create({ data: { name: '6º Ano A' } });
+    // Mapeia o código da turma (ex: '6A') para o banco de dados
+    const nomesTurmas: any = {
+      '6A': '6º Ano A', '6B': '6º Ano B',
+      '7A': '7º Ano A', '7B': '7º Ano B',
+      '8A': '8º Ano A', '8B': '8º Ano B',
+      '9A': '9º Ano A', '9B': '9º Ano B',
+      '1S': '1ª Série', '2S': '2ª Série', '3S': '3ª Série'
+    };
+
+    const nomeTurmaReal = nomesTurmas[classCode] || '6º Ano A';
+
+    let turmaObj = await prisma.class.findFirst({ where: { name: nomeTurmaReal } });
+    if (!turmaObj) {
+      turmaObj = await prisma.class.create({ data: { name: nomeTurmaReal } });
     }
 
     let defaultSubject = await prisma.subject.findFirst();
@@ -87,11 +98,12 @@ app.post('/api/plans', async (req: any, res: any) => {
       }
     });
 
+    // O upsert garante que a chave única (professor + turma + disciplina + quinzena) atualize exatamente o registro correspondente
     const plan = await prisma.lessonPlan.upsert({
       where: {
         teacherId_classId_subjectId_periodId: {
           teacherId: validTeacherId,
-          classId: defaultClass.id,
+          classId: turmaObj.id,
           subjectId: defaultSubject.id,
           periodId: validPeriodId
         }
@@ -99,7 +111,7 @@ app.post('/api/plans', async (req: any, res: any) => {
       update: { content, skills, status, sentAt: sentDate },
       create: { 
         teacherId: validTeacherId, 
-        classId: defaultClass.id, 
+        classId: turmaObj.id, 
         subjectId: defaultSubject.id, 
         periodId: validPeriodId, 
         content, 
