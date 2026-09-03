@@ -95,7 +95,7 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// Rota de Avaliação do Coordenador com Tratamento Flexível de Turma
+// Rota de Avaliação com Upsert (Funciona para qualquer professor, com ou sem envio prévio)
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
   const { teacherId, classCode, classNome, periodId, status, feedback } = req.body;
   try {
@@ -118,33 +118,48 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
       defaultSubject = await prisma.subject.create({ data: { name: 'Matemática' } });
     }
 
-    const existingPlan = await prisma.lessonPlan.findFirst({
-      where: {
-        teacherId: Number(teacherId),
-        classId: turmaObj.id,
-        subjectId: defaultSubject.id,
-        periodId: Number(periodId)
-      }
+    let validPeriodId = Number(periodId) || 1;
+    await prisma.period.upsert({
+      where: { id: validPeriodId }, update: {}, create: { id: validPeriodId, name: `Quinzena ${validPeriodId}` }
     });
 
-    if (!existingPlan) {
-      return res.status(404).json({ error: 'Planejamento não encontrado no banco para esta turma e período.' });
-    }
+    const queryKey = {
+      teacherId: Number(teacherId),
+      classId: turmaObj.id,
+      subjectId: defaultSubject.id,
+      periodId: validPeriodId
+    };
+
+    const existingPlan = await prisma.lessonPlan.findFirst({ where: queryKey });
 
     let parsedContent: any = {};
-    try { parsedContent = JSON.parse(existingPlan.content); } catch (e) {}
+    if (existingPlan && existingPlan.content) {
+      try { parsedContent = JSON.parse(existingPlan.content); } catch (e) {}
+    }
     
     parsedContent.coordinatorFeedback = feedback;
 
-    const updatedPlan = await prisma.lessonPlan.update({
-      where: { id: existingPlan.id },
-      data: { 
-        status: status, 
-        content: JSON.stringify(parsedContent) 
+    // UPSERT: Atualiza se existe ou cria se não existe
+    const savedPlan = await prisma.lessonPlan.upsert({
+      where: {
+        teacherId_classId_subjectId_periodId: queryKey
+      },
+      update: {
+        status: status,
+        content: JSON.stringify(parsedContent)
+      },
+      create: {
+        teacherId: Number(teacherId),
+        classId: turmaObj.id,
+        subjectId: defaultSubject.id,
+        periodId: validPeriodId,
+        status: status,
+        skills: '',
+        content: JSON.stringify(parsedContent)
       }
     });
 
-    res.json(updatedPlan);
+    res.json(savedPlan);
   } catch (error) {
     console.error("ERRO NO EVALUATE:", error);
     res.status(500).json({ error: 'Erro interno ao avaliar o planejamento.' });
