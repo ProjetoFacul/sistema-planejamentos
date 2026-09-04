@@ -29,10 +29,8 @@ export default function App() {
   const [allPlans, setAllPlans] = useState<any[]>([]);
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
 
-  // Navegação Interna da Coordenação ('auditoria' ou 'docentes')
   const [abaCoordenacao, setAbaCoordenacao] = useState<'auditoria' | 'docentes'>('auditoria');
 
-  // Estados do Professor
   const [profNome, setProfNome] = useState('');
   const [disciplina, setDisciplina] = useState('Matemática');
   const [turmaSelecionada, setTurmaSelecionada] = useState<string | null>(null);
@@ -40,7 +38,6 @@ export default function App() {
   const [semanaAtiva, setSemanaAtiva] = useState<'1' | '2' | 'todas'>('1');
   const [dadosPorTurmaQuinzena, setDadosPorTurmaQuinzena] = useState<any>({});
   
-  // Modais e Gestão da Coordenação
   const [professorInspecionado, setProfessorInspecionado] = useState<any>(null);
   const [modalNovoProfessor, setModalNovoProfessor] = useState(false);
   const [novoNomeProf, setNovoNomeProf] = useState('');
@@ -60,8 +57,12 @@ export default function App() {
         if (parsed) {
           setUser(parsed);
           if (parsed.name) setProfNome(parsed.name);
-          const savedRascunhos = localStorage.getItem(`rascunhos_turmas_${parsed.id}`);
-          if (savedRascunhos) setDadosPorTurmaQuinzena(JSON.parse(savedRascunhos));
+          const savedRascunhos = localStorage.getItem(`rascunhos_turmas_v2_${parsed.id}`);
+          if (savedRascunhos) {
+            setDadosPorTurmaQuinzena(JSON.parse(savedRascunhos));
+          } else {
+            setDadosPorTurmaQuinzena({}); // Garante que inicia limpo se não houver rascunho próprio
+          }
         }
       }
     } catch (e) {}
@@ -92,8 +93,13 @@ export default function App() {
         localStorage.setItem('user', JSON.stringify(res.data));
         if (res.data.name) setProfNome(res.data.name);
 
-        const savedRascunhos = localStorage.getItem(`rascunhos_turmas_${res.data.id}`);
-        if (savedRascunhos) setDadosPorTurmaQuinzena(JSON.parse(savedRascunhos));
+        // Carrega rascunhos exclusivos deste ID ou limpa se for novo
+        const savedRascunhos = localStorage.getItem(`rascunhos_turmas_v2_${res.data.id}`);
+        if (savedRascunhos) {
+          setDadosPorTurmaQuinzena(JSON.parse(savedRascunhos));
+        } else {
+          setDadosPorTurmaQuinzena({});
+        }
         carregarDadosServidor();
       }
     } catch (err: any) {
@@ -125,7 +131,7 @@ export default function App() {
       celulas[`s${semana}_${dia}`] = valor;
 
       const novosDados = { ...safePrev, [chaveUnica]: { ...dadosAtuais, turmaId: turmaSelecionada, quinzena: quinzenaAtiva, disciplina, profNome, celulasConteudo: celulas } };
-      if (user?.id) localStorage.setItem(`rascunhos_turmas_${user.id}`, JSON.stringify(novosDados));
+      if (user?.id) localStorage.setItem(`rascunhos_turmas_v2_${user.id}`, JSON.stringify(novosDados));
       return novosDados;
     });
   };
@@ -137,7 +143,7 @@ export default function App() {
       const safePrev = prev || {};
       const dadosAtuais = safePrev[chaveUnica] || { celulasConteudo: {}, skills: '' };
       const novosDados = { ...safePrev, [chaveUnica]: { ...dadosAtuais, turmaId: turmaSelecionada, quinzena: quinzenaAtiva, disciplina, profNome, skills: valor } };
-      if (user?.id) localStorage.setItem(`rascunhos_turmas_${user.id}`, JSON.stringify(novosDados));
+      if (user?.id) localStorage.setItem(`rascunhos_turmas_v2_${user.id}`, JSON.stringify(novosDados));
       return novosDados;
     });
   };
@@ -208,14 +214,8 @@ export default function App() {
       setNovaSenhaProf('');
       setModalNovoProfessor(false);
       carregarDadosServidor();
-    } catch (err) {
-      const novoId = Date.now();
-      setAllTeachers(prev => [...prev, { id: novoId, name: novoNomeProf, email: novoEmailProf, active: true, role: 'TEACHER' }]);
-      alert('Docente cadastrado localmente com sucesso!');
-      setNovoNomeProf('');
-      setNovoEmailProf('');
-      setNovaSenhaProf('');
-      setModalNovoProfessor(false);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Erro ao cadastrar docente. Verifique os dados informados.');
     }
   };
 
@@ -227,8 +227,7 @@ export default function App() {
         alert(`Status do docente atualizado com sucesso.`);
         carregarDadosServidor();
       } catch (e) {
-        setAllTeachers(prev => prev.map(t => t.id === professor.id ? { ...t, active: ativar } : t));
-        alert(`Status alterado localmente com sucesso.`);
+        alert(`Erro ao alterar status do docente.`);
       }
     }
   };
@@ -369,7 +368,6 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                      {/* FILTRA APENAS OS ATIVOS NO PAINEL PRINCIPAL DE AUDITORIA */}
                       {allTeachers.filter((t: any) => t.active !== false && t.name.toLowerCase().includes(filtroBuscaProf.toLowerCase())).map((t: any, idx: number) => {
                         const planosDoProf = (allPlans || []).filter((p: any) => p.teacherId === t.id);
                         const totalAprovados = planosDoProf.filter((p: any) => p.status === 'APPROVED').length;
@@ -426,7 +424,6 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* ABA EXCLUSIVA DE GESTÃO DE DOCENTES */
             <div className="space-y-6">
               <div className="bg-[#0e162e] border border-slate-800 p-6 rounded-3xl shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -438,7 +435,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Seção de Professores Ativos */}
               <div className="bg-[#0e162e] border border-slate-800 p-6 rounded-3xl shadow-xs">
                 <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">🟢 Docentes Ativos no Sistema</h3>
                 <div className="rounded-2xl border border-slate-800 overflow-hidden">
@@ -467,7 +463,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Seção de Professores Inativos / Desligados (COM OPÇÃO DE VER HISTÓRICO) */}
               <div className="bg-[#0e162e] border border-slate-800 p-6 rounded-3xl shadow-xs">
                 <h3 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">🔴 Docentes Inativos / Desligados (Histórico de Planejamentos)</h3>
                 <div className="rounded-2xl border border-slate-800 overflow-hidden">
@@ -620,7 +615,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE CADASTRO DE NOVO DOCENTE */}
       {modalNovoProfessor && (
         <div className="fixed inset-0 bg-[#070d1f]/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-[#0e162e] rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-700 text-slate-100">
@@ -647,7 +641,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE INSPEÇÃO DA COORDENAÇÃO */}
       {professorInspecionado && (
         <div className="fixed inset-0 bg-[#070d1f]/80 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-[#0e162e] rounded-3xl w-full max-w-6xl h-[90vh] shadow-2xl border border-slate-700 flex flex-col overflow-hidden text-slate-100">
