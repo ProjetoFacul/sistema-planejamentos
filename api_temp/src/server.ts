@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 app.use(cors());
 app.use(express.json());
 
-// Rota de Login Institucional
+// Rota de Login Institucional (Com bloqueio de inativos/desligados)
 app.post('/api/login', async (req: any, res: any) => {
   const { email, password } = req.body;
   try {
@@ -23,7 +23,8 @@ app.post('/api/login', async (req: any, res: any) => {
           name: isCoord ? 'Coordenação Pedagógica' : nomeGerado,
           email: email,
           password: password || '123',
-          role: isCoord ? 'COORDINATOR' : 'TEACHER'
+          role: isCoord ? 'COORDINATOR' : 'TEACHER',
+          active: true // Nasce ativo por padrão
         }
       });
     }
@@ -31,18 +32,66 @@ app.post('/api/login', async (req: any, res: any) => {
     if (!user || user.password !== password) {
       return res.status(401).json({ error: 'E-mail institucional ou senha incorretos.' });
     }
+
+    // REGRA DE BLOQUEIO DE DESLIGADOS
+    if (user.active === false) {
+      return res.status(403).json({ error: 'Este acesso foi revogado / inativado pela coordenação.' });
+    }
+
     res.json(user);
   } catch (error) {
+    console.error("ERRO NO LOGIN:", error);
     res.status(500).json({ error: 'Erro no servidor.' });
   }
 });
 
+// Rota para listar professores (Retorna todos para que a coordenação gerencie ativos e inativos)
 app.get('/api/teachers', async (req, res) => {
   try {
-    const teachers = await prisma.user.findMany({ where: { role: 'TEACHER' } });
+    const teachers = await prisma.user.findMany({ 
+      where: { role: 'TEACHER' },
+      orderBy: { name: 'asc' }
+    });
     res.json(teachers);
   } catch (error) {
+    console.error("ERRO AO LISTAR PROFESSORES:", error);
     res.status(500).json({ error: 'Erro ao listar professores.' });
+  }
+});
+
+// NOVIDADE: Rota para a Coordenação Cadastrar Novo Docente
+app.post('/api/teachers', async (req: any, res: any) => {
+  const { name, email, password, role } = req.body;
+  try {
+    const novoTeacher = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: password || '123',
+        role: role || 'TEACHER',
+        active: true // Sempre nasce ativo
+      }
+    });
+    res.status(201).json(novoTeacher);
+  } catch (error) {
+    console.error("ERRO AO CADASTRAR DOCENTE:", error);
+    res.status(400).json({ error: 'Erro ao cadastrar docente. O e-mail pode já estar em uso.' });
+  }
+});
+
+// NOVIDADE: Rota para a Coordenação Inativar (Desligar) ou Reativar Acesso
+app.patch('/api/teachers/:id/status', async (req: any, res: any) => {
+  const { id } = req.params;
+  const { active } = req.body; // Recebe true ou false
+  try {
+    const teacherAtualizado = await prisma.user.update({
+      where: { id: Number(id) },
+      data: { active: Boolean(active) }
+    });
+    res.json({ message: 'Status atualizado com sucesso.', teacher: teacherAtualizado });
+  } catch (error) {
+    console.error("ERRO AO ALTERAR STATUS:", error);
+    res.status(500).json({ error: 'Erro ao atualizar status do docente.' });
   }
 });
 
@@ -95,7 +144,7 @@ app.post('/api/plans', async (req: any, res: any) => {
   }
 });
 
-// Rota de Avaliação com Upsert (Funciona para qualquer professor, com ou sem envio prévio)
+// Rota de Avaliação com Upsert
 app.post('/api/plans/evaluate', async (req: any, res: any) => {
   const { teacherId, classCode, classNome, periodId, status, feedback } = req.body;
   try {
@@ -139,7 +188,6 @@ app.post('/api/plans/evaluate', async (req: any, res: any) => {
     
     parsedContent.coordinatorFeedback = feedback;
 
-    // UPSERT: Atualiza se existe ou cria se não existe
     const savedPlan = await prisma.lessonPlan.upsert({
       where: {
         teacherId_classId_subjectId_periodId: queryKey

@@ -8,11 +8,12 @@ generator client {
 }
 
 model User {
-  id       Int     @id @default(autoincrement())
+  id       Int      @id @default(autoincrement())
   name     String
-  email    String  @unique
-  password String  // Senha do professor
-  role     String  // "TEACHER" ou "COORDINATOR"
+  email    String   @unique
+  password String
+  role     String   @default("TEACHER")
+  active   Boolean  @default(true)  
   plans    LessonPlan[]
 }
 
